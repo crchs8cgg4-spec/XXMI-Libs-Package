@@ -335,6 +335,13 @@ BOOL WINAPI DllMain(
 	switch (fdwReason)
 	{
 		case DLL_PROCESS_ATTACH:
+			{
+				FILE *f = _wfopen(L"C:\\XXMI\\dllmain_diagnostic.txt", L"w");
+				if (f) {
+					fputs("DLL_PROCESS_ATTACH\\n", f);
+					fclose(f);
+				}
+			}
 			migoto_handle = hinstDLL;
 			cHookMgr.SetEnableDebugOutput(bLog);
 
