@@ -108,21 +108,24 @@ HackerDevice* lookup_hacker_device(IUnknown *unknown)
 	// with C style casting), but we need the real IUnknown pointer with
 	// the COM guarantee that it will match for all interfaces of the same
 	// object, so we call QueryInterface on it again to get this:
-	if (FAILED(unknown->QueryInterface(IID_IUnknown, (void**)&real_unknown))) {
-		// ... ehh, what? Shouldn't happen. Fatal.
-		LogInfo("lookup_hacker_device: QueryInterface(IID_Unknown) failed\n");
-		DoubleBeepExit();
-	}
+	HRESULT canonical_unknown_hr =
+	unknown->QueryInterface(IID_IUnknown, (void**)&real_unknown);
 
+if (FAILED(canonical_unknown_hr)) {
+	LogInfo("lookup_hacker_device: QueryInterface(IID_Unknown) failed - D3DMetal compatibility fallback\n");
+} else {
 	EnterCriticalSectionPretty(&G->mCriticalSection);
+
 	i = device_map.find(real_unknown);
+
 	if (i != device_map.end()) {
 		ret = i->second;
 		ret->AddRef();
 	}
-	LeaveCriticalSection(&G->mCriticalSection);
 
+	LeaveCriticalSection(&G->mCriticalSection);
 	real_unknown->Release();
+}
 
 	if (!ret) {
 		// Either not a d3d11 device, or something has handed us an
@@ -154,7 +157,7 @@ HackerDevice* lookup_hacker_device(IUnknown *unknown)
 		// the above device_map lookup which relies on the COM identity
 		// rule in favour of this, since we expect this to always work:
 		if (SUCCEEDED(unknown->QueryInterface(IID_IDXGIObject, (void**)&dxgi_obj))) {
-			UINT size;
+			UINT size = sizeof(HackerDevice*);
 			if (SUCCEEDED(dxgi_obj->GetPrivateData(IID_HackerDevice, &size, &ret))) {
 				LogInfo("Notice: Unwrapped device and COM Identity violation, Found HackerDevice via GetPrivateData strategy\n");
 				ret->AddRef();
@@ -174,10 +177,17 @@ static IUnknown* register_hacker_device(HackerDevice *hacker_device)
 	IUnknown *real_unknown = NULL;
 
 	// As above, our key is the real IUnknown gained through QueryInterface
-	if (FAILED(hacker_device->GetPassThroughOrigDevice1()->QueryInterface(IID_IUnknown, (void**)&real_unknown))) {
-		LogInfo("register_hacker_device: QueryInterface(IID_Unknown) failed\n");
-		DoubleBeepExit();
-	}
+	bool canonical_unknown =
+	SUCCEEDED(hacker_device->GetPassThroughOrigDevice1()->QueryInterface(
+		IID_IUnknown, (void**)&real_unknown));
+
+if (!canonical_unknown) {
+	real_unknown = static_cast<IUnknown*>(
+		hacker_device->GetPassThroughOrigDevice1());
+
+	LogInfo("register_hacker_device: QueryInterface(IID_Unknown) failed - using D3DMetal device-pointer fallback: %p\n",
+		real_unknown);
+}
 
 	LogInfo("register_hacker_device: Registering IUnknown: %p -> HackerDevice: %p\n",
 			real_unknown, hacker_device);
@@ -186,6 +196,7 @@ static IUnknown* register_hacker_device(HackerDevice *hacker_device)
 	device_map[real_unknown] = hacker_device;
 	LeaveCriticalSection(&G->mCriticalSection);
 
+	if (canonical_unknown)
 	real_unknown->Release();
 
 	// We return the IUnknown for convenience, since the HackerDevice needs

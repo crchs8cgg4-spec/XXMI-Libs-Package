@@ -1,0 +1,35 @@
+name: Build D3DMetal Test DLL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild for VS2022
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
+
+      - name: Build x64 Zip Release
+        run: >
+          msbuild StereovisionHacks.sln
+          -property:Configuration="Zip Release"
+          -property:Platform=x64
+          -target:rebuild
+          -verbosity:minimal
+
+      - name: Show built DLLs
+        shell: pwsh
+        run: Get-ChildItem -Path './x64/Zip Release' -Filter '*.dll'
+
+      - name: Upload DLLs
+        uses: actions/upload-artifact@v4
+        with:
+          name: XXMI-D3DMetal-Test
+          path: x64/Zip Release/*.dll
