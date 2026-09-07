@@ -1,7 +1,9 @@
 name: Build D3DMetal Test DLL
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - d3dmetal-iunknown-fallback
 
 jobs:
   build:
